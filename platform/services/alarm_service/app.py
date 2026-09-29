@@ -1,20 +1,21 @@
 """
 文件：alarm_service/app.py
-内容：告警微服务 — 创建/列表/确认
 """
 import sys
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "libs" / "emp_py"))
 
+from emp_py.auth import require_api_key  # noqa: E402
 from emp_py.db import get_db, init_db  # noqa: E402
+from emp_py.fastapi_app import create_service_app  # noqa: E402
 from emp_py.models import AlarmEvent, Device  # noqa: E402
 
-app = FastAPI(title="EMP alarm_service", version="0.1.0")
+app = create_service_app("alarm_service")
 
 
 class AlarmIn(BaseModel):
@@ -29,13 +30,8 @@ def on_startup():
     init_db()
 
 
-@app.get("/health")
-def health():
-    return {"service": "alarm_service", "status": "ok"}
-
-
 @app.post("/api/alarms")
-def create_alarm(body: AlarmIn, db: Session = Depends(get_db)):
+def create_alarm(body: AlarmIn, db: Session = Depends(get_db), _k: str = Depends(require_api_key)):
     device_id = None
     if body.device_code:
         d = db.query(Device).filter_by(device_code=body.device_code).first()
@@ -69,7 +65,7 @@ def list_alarms(db: Session = Depends(get_db)):
 
 
 @app.post("/api/alarms/{alarm_id}/ack")
-def ack_alarm(alarm_id: str, db: Session = Depends(get_db)):
+def ack_alarm(alarm_id: str, db: Session = Depends(get_db), _k: str = Depends(require_api_key)):
     a = db.query(AlarmEvent).filter_by(id=alarm_id).first()
     if not a:
         raise HTTPException(404, "alarm not found")

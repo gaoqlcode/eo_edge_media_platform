@@ -1,24 +1,25 @@
 """
 文件：device_service/app.py
-内容：设备微服务 — 注册/列表/心跳更新
+内容：设备微服务 — 注册/列表/心跳；写操作需 API Key；带 /metrics
 """
 import sys
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-# 把公共库加入路径（开发态；安装包后可去掉）
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "libs" / "emp_py"))
 
+from emp_py.auth import require_api_key  # noqa: E402
 from emp_py.db import get_db, init_db  # noqa: E402
+from emp_py.fastapi_app import create_service_app  # noqa: E402
 from emp_py.models import Device, Tenant  # noqa: E402
 from emp_py.mq import publish_event  # noqa: E402
 from emp_py.redis_client import cache_get, cache_set  # noqa: E402
 
-app = FastAPI(title="EMP device_service", version="0.1.0")
+app = create_service_app("device_service")
 
 
 class DeviceCreate(BaseModel):
@@ -48,11 +49,6 @@ def on_startup():
         db.close()
 
 
-@app.get("/health")
-def health():
-    return {"service": "device_service", "status": "ok"}
-
-
 @app.get("/api/devices")
 def list_devices(db: Session = Depends(get_db)):
     rows = db.query(Device).all()
@@ -70,7 +66,11 @@ def list_devices(db: Session = Depends(get_db)):
 
 
 @app.post("/api/devices")
-def create_device(body: DeviceCreate, db: Session = Depends(get_db)):
+def create_device(
+    body: DeviceCreate,
+    db: Session = Depends(get_db),
+    _key: str = Depends(require_api_key),
+):
     tenant = db.query(Tenant).filter_by(code="default").first()
     if not tenant:
         raise HTTPException(500, "missing default tenant")
@@ -97,6 +97,7 @@ def create_device(body: DeviceCreate, db: Session = Depends(get_db)):
 
 @app.post("/api/devices/heartbeat")
 def heartbeat(body: HeartbeatIn, db: Session = Depends(get_db)):
+    # 边端心跳：生产可改为 mTLS/设备凭证；学习阶段保持开放，靠网络隔离
     tenant = db.query(Tenant).filter_by(code="default").first()
     d = (
         db.query(Device)
@@ -120,7 +121,6 @@ def heartbeat(body: HeartbeatIn, db: Session = Depends(get_db)):
         d.last_seen_at = datetime.utcnow()
         d.updated_at = datetime.utcnow()
     db.commit()
-    # Redis 在线缓存（TTL 30s）+ 领域事件
     cache_set(f"device:online:{body.device_code}", body.status, ttl=30)
     published = publish_event(
         "emp.device.heartbeat",
@@ -137,5 +137,4 @@ def heartbeat(body: HeartbeatIn, db: Session = Depends(get_db)):
 
 @app.get("/api/devices/{device_code}/online")
 def online_status(device_code: str):
-    """读 Redis/内存缓存的在线状态（不打库）。"""
     return {"device_code": device_code, "cached_status": cache_get(f"device:online:{device_code}")}

@@ -1,36 +1,13 @@
 http:
   routers:
-    - rule: "PathPrefix(`/api/devices`)"
-      service: device
-    - rule: "PathPrefix(`/api/sessions`)"
-      service: session
-    - rule: "PathPrefix(`/api/assets`)"
-      service: indexer
-    - rule: "PathPrefix(`/api/alarms`)"
-      service: alarm
-    - rule: "PathPrefix(`/api/bff`)"
-      service: bff
-    - rule: "PathPrefix(`/health`)"
-      service: bff
+    - rule: "PathPrefix(`/api/devices`) || PathPrefix(`/api/sessions`) || PathPrefix(`/api/assets`) || PathPrefix(`/api/alarms`) || PathPrefix(`/api/bff`) || PathPrefix(`/health`) || PathPrefix(`/metrics`)"
+      service: bff_and_split
+      entryPoints:
+        - web
 
   services:
-    device:
+    # 简化：先把管理流量转到 BFF；细路由可再拆
+    bff_and_split:
       loadBalancer:
         servers:
-          - url: "http://host.docker.internal:8101"
-    session:
-      loadBalancer:
-        servers:
-          - url: "http://host.docker.internal:8102"
-    indexer:
-      loadBalancer:
-        servers:
-          - url: "http://host.docker.internal:8103"
-    alarm:
-      loadBalancer:
-        servers:
-          - url: "http://host.docker.internal:8104"
-    bff:
-      loadBalancer:
-        servers:
-          - url: "http://host.docker.internal:8105"
+          - url: "http://172.17.0.1:8105"

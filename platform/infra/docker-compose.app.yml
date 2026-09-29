@@ -1,0 +1,19 @@
+version: "3.3"
+# 应用层编排（依赖已运行的 PG/Redis/Rabbit 或本机 micromamba）
+# 用法示例：在能构建镜像的环境
+#   sudo docker-compose -f platform/infra/docker-compose.app.yml build
+services:
+  device_service:
+    build:
+      context: ../..
+      dockerfile: platform/infra/Dockerfile.python_service
+      args:
+        SERVICE: device_service
+    environment:
+      DATABASE_URL: postgresql+psycopg2://emp:emp_dev_pass@host.docker.internal:55432/emp_platform
+      REDIS_URL: redis://emp_redis_docker:6379/0
+      RABBITMQ_URL: amqp://emp:emp_dev_pass@emp_rabbitmq:5672/
+      EMP_API_KEY: emp-dev-key
+    ports:
+      - "8101:8000"
+    network_mode: bridge

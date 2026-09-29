@@ -1,0 +1,35 @@
+name: emp-ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  cpp-labs:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: build
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build -j$(nproc)
+          cd build && ctest --output-on-failure
+
+  python-unit:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: deps
+        run: pip install -r requirements.txt pytest
+      - name: test
+        env:
+          EMP_USE_SQLITE: "1"
+          DATABASE_URL: sqlite:////tmp/emp_ci.db
+          EMP_MEMORY_BUS: "1"
+        run: |
+          export PYTHONPATH=$PWD/platform/libs/emp_py
+          pytest -q tests/unit

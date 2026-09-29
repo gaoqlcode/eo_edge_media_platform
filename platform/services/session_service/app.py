@@ -1,21 +1,22 @@
 """
-文件：session_service/app.py
-内容：录制会话微服务 — 开始/结束/查询
+文件：session_service/app.py — 会话服务 + 统一健康/指标；写操作需 API Key
 """
 import sys
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "libs" / "emp_py"))
 
+from emp_py.auth import require_api_key  # noqa: E402
 from emp_py.db import get_db, init_db  # noqa: E402
+from emp_py.fastapi_app import create_service_app  # noqa: E402
 from emp_py.models import Device, RecordSession  # noqa: E402
 
-app = FastAPI(title="EMP session_service", version="0.1.0")
+app = create_service_app("session_service")
 
 
 class SessionStart(BaseModel):
@@ -33,11 +34,6 @@ class SessionEnd(BaseModel):
 @app.on_event("startup")
 def on_startup():
     init_db()
-
-
-@app.get("/health")
-def health():
-    return {"service": "session_service", "status": "ok"}
 
 
 @app.post("/api/sessions/start")
@@ -84,7 +80,7 @@ def end_session(body: SessionEnd, db: Session = Depends(get_db)):
 
 
 @app.get("/api/sessions")
-def list_sessions(db: Session = Depends(get_db)):
+def list_sessions(_key: str = Depends(require_api_key), db: Session = Depends(get_db)):
     rows = db.query(RecordSession).order_by(RecordSession.created_at.desc()).all()
     return [
         {

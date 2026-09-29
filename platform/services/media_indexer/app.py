@@ -1,20 +1,20 @@
 """
 文件：media_indexer/app.py
-内容：媒体资产索引服务 — 登记文件元数据
 """
 import sys
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "libs" / "emp_py"))
 
 from emp_py.db import get_db, init_db  # noqa: E402
+from emp_py.fastapi_app import create_service_app  # noqa: E402
 from emp_py.models import MediaAsset, RecordSession  # noqa: E402
 
-app = FastAPI(title="EMP media_indexer", version="0.1.0")
+app = create_service_app("media_indexer")
 
 
 class AssetIn(BaseModel):
@@ -27,11 +27,6 @@ class AssetIn(BaseModel):
 @app.on_event("startup")
 def on_startup():
     init_db()
-
-
-@app.get("/health")
-def health():
-    return {"service": "media_indexer", "status": "ok"}
 
 
 @app.post("/api/assets")

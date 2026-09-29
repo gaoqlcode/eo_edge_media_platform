@@ -1,37 +1,37 @@
 """
-文件：control_bff/app.py
-内容：BFF 聚合层 — 汇总设备/会话/告警，供客户端一次拉取
+文件：control_bff/app.py — BFF 聚合；下游带 API Key
 """
+import os
 import sys
 from pathlib import Path
 
 import httpx
-from fastapi import FastAPI
 
-app = FastAPI(title="EMP control_bff", version="0.1.0")
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "libs" / "emp_py"))
+
+from emp_py.fastapi_app import create_service_app  # noqa: E402
+
+app = create_service_app("control_bff")
 
 DEVICE_URL = "http://127.0.0.1:8101"
 SESSION_URL = "http://127.0.0.1:8102"
 ALARM_URL = "http://127.0.0.1:8104"
-
-
-@app.get("/health")
-def health():
-    return {"service": "control_bff", "status": "ok"}
+API_KEY = os.getenv("EMP_API_KEY", "emp-dev-key")
 
 
 @app.get("/api/bff/dashboard")
 def dashboard():
-    """聚合仪表盘数据；下游不可达时返回部分结果与错误字段。"""
+    headers = {"X-API-Key": API_KEY}
     out = {"devices": [], "sessions": [], "alarms": [], "errors": []}
     with httpx.Client(timeout=2.0) as client:
-        for key, url in (
-            ("devices", f"{DEVICE_URL}/api/devices"),
-            ("sessions", f"{SESSION_URL}/api/sessions"),
-            ("alarms", f"{ALARM_URL}/api/alarms"),
+        for key, url, need_key in (
+            ("devices", f"{DEVICE_URL}/api/devices", False),
+            ("sessions", f"{SESSION_URL}/api/sessions", True),
+            ("alarms", f"{ALARM_URL}/api/alarms", False),
         ):
             try:
-                r = client.get(url)
+                h = headers if need_key else {}
+                r = client.get(url, headers=h)
                 r.raise_for_status()
                 out[key] = r.json()
             except Exception as e:
