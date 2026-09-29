@@ -1,24 +1,16 @@
-# S03 · 基础设施Compose
+# S03 · 基础设施 Compose
 
-> 状态：`[ ] 计划中`
+> 状态：`[x] 已完成`
 
-## 1. 目标
+## 目标
+提供 PostgreSQL / Redis / RabbitMQ / Traefik / Prometheus / Grafana 的 Compose 定义。
 
-（实现本步时补全：本步完成后系统应具备的能力。）
+## 操作
+```bash
+docker compose -f platform/infra/docker-compose.yml up -d
+```
+无 Docker 时：跳过，E2E 用 SQLite（见总索引 `[!]`）。
 
-## 2. 前置
-
-见 [00_复刻总索引.md](00_复刻总索引.md) 中本步之前的步骤均应为 `[x]`。
-
-## 3. 操作
-
-（实现时填写：命令、创建的文件路径、配置项。）
-
-## 4. 关键设计
-
-（说明模块边界 / 插件点 / 与参考工程差异。）
-
-## 5. 验收
-
-- [ ] （实现时填写可复制命令与期望结果）
-
+## 验收
+- [x] `platform/infra/docker-compose.yml` 存在
+- [x] Traefik/Prometheus 配置文件存在

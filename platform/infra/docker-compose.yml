@@ -1,0 +1,83 @@
+# =============================================================================
+# 文件：docker-compose.yml
+# 内容：平台基础设施（PostgreSQL / Redis / RabbitMQ / Traefik / 观测）
+# 用法：在有 Docker 的机器上：docker compose -f platform/infra/docker-compose.yml up -d
+# =============================================================================
+services:
+  postgres:
+    image: postgres:16
+    container_name: emp_postgres
+    environment:
+      POSTGRES_USER: emp
+      POSTGRES_PASSWORD: emp_dev_pass
+      POSTGRES_DB: emp_platform
+    ports:
+      - "5432:5432"
+    volumes:
+      - emp_pg_data:/var/lib/postgresql/data
+      - ./migrations/001_init_schema.sql:/docker-entrypoint-initdb.d/001_init_schema.sql:ro
+      - ./migrations/002_seed_demo.sql:/docker-entrypoint-initdb.d/002_seed_demo.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U emp -d emp_platform"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7
+    container_name: emp_redis
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: emp_rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: emp
+      RABBITMQ_DEFAULT_PASS: emp_dev_pass
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+
+  traefik:
+    image: traefik:v3.0
+    container_name: emp_traefik
+    command:
+      - "--api.insecure=true"
+      - "--providers.file.filename=/etc/traefik/dynamic.yml"
+      - "--entrypoints.web.address=:80"
+    ports:
+      - "8080:80"
+      - "8088:8080"
+    volumes:
+      - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: emp_prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: emp_grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: emp_dev_pass
+
+volumes:
+  emp_pg_data:

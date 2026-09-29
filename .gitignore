@@ -56,3 +56,10 @@ Thumbs.db
 moc_*.cpp
 ui_*.h
 qrc_*.cpp
+
+.tools/
+.run/
+*.db
+build-client/
+.tools/
+.run/

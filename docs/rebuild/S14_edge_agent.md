@@ -1,24 +1,18 @@
 # S14 · edge_agent
 
-> 状态：`[ ] 计划中`
+> 状态：`[x] 已完成`
 
-## 1. 目标
+## 目标
+插件化边端主机：dlopen Virtual 相机 → 环缓 → HTTP 心跳。
 
-（实现本步时补全：本步完成后系统应具备的能力。）
+## 操作
+```bash
+cmake -S . -B build && cmake --build build -j$(nproc)
+EMP_FRAMES=5 ./build/bin/edge_agent ./build/lib/libemp_cam_Virtual.so
+```
 
-## 2. 前置
+## 对照
+`/home/gaoql/eo_pod_server` 的 CameraPluginAbi / CameraHub。
 
-见 [00_复刻总索引.md](00_复刻总索引.md) 中本步之前的步骤均应为 `[x]`。
-
-## 3. 操作
-
-（实现时填写：命令、创建的文件路径、配置项。）
-
-## 4. 关键设计
-
-（说明模块边界 / 插件点 / 与参考工程差异。）
-
-## 5. 验收
-
-- [ ] （实现时填写可复制命令与期望结果）
-
+## 验收
+- [x] 插件 id=Virtual；可向 device_service 发心跳
