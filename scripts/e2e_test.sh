@@ -6,9 +6,10 @@ EMP_BIN="${ROOT}/.tools/mamba_root/envs/emp/bin"
 export PATH="${EMP_BIN}:${HOME}/.local/bin:/usr/bin:${PATH}"
 export PYTHONPATH="${ROOT}/platform/libs/emp_py:${PYTHONPATH:-}"
 export DATABASE_URL="postgresql+psycopg2://emp@127.0.0.1:55432/emp_platform"
-export REDIS_URL="redis://127.0.0.1:56379/0"
-# 允许显式覆盖
+export REDIS_URL="redis://127.0.0.1:6379/0"
+export RABBITMQ_URL="amqp://emp:emp_dev_pass@127.0.0.1:5672/"
 [[ -n "${EMP_DATABASE_URL:-}" ]] && export DATABASE_URL="${EMP_DATABASE_URL}"
+[[ -n "${EMP_REDIS_URL:-}" ]] && export REDIS_URL="${EMP_REDIS_URL}"
 PYTHON="${EMP_BIN}/python"
 [[ -x "${PYTHON}" ]] || PYTHON="$(command -v python3)"
 
@@ -34,6 +35,14 @@ curl -sf -X POST http://127.0.0.1:8101/api/devices \
 curl -sf -X POST http://127.0.0.1:8101/api/devices/heartbeat \
   -H 'Content-Type: application/json' \
   -d '{"device_code":"edge-e2e-pg","status":"online","platform":"wsl"}'
+echo
+curl -sf "http://127.0.0.1:8101/api/devices/edge-e2e-pg/online"; echo
+
+# 后台跑 worker 几秒消费 MQ
+"${PYTHON}" "${ROOT}/platform/services/media_worker/worker.py" outbox &
+WPID=$!
+sleep 1
+kill "${WPID}" 2>/dev/null || true
 SESSION="sess-pg-$(date +%s)"
 curl -sf -X POST http://127.0.0.1:8102/api/sessions/start \
   -H 'Content-Type: application/json' \

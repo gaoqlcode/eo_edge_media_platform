@@ -24,6 +24,16 @@ set_target_properties(emp_cam_Virtual PROPERTIES
   OUTPUT_NAME emp_cam_Virtual
 )
 
+# V4L2 占位插件（RK3588 前可用 Stub）
+add_library(emp_cam_V4L2_Stub SHARED
+  platform/services/edge_agent/plugins/V4L2_Stub/V4l2StubCamera.cpp
+)
+target_include_directories(emp_cam_V4L2_Stub PRIVATE ${EMP_COMMON_DIR}/include)
+set_target_properties(emp_cam_V4L2_Stub PROPERTIES
+  LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
+  OUTPUT_NAME emp_cam_V4L2_Stub
+)
+
 add_executable(edge_agent platform/services/edge_agent/src/main.cpp)
 target_link_libraries(edge_agent PRIVATE emp_common)
 set_target_properties(edge_agent PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)

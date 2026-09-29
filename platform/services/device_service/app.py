@@ -15,6 +15,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "libs" / "emp_py"))
 
 from emp_py.db import get_db, init_db  # noqa: E402
 from emp_py.models import Device, Tenant  # noqa: E402
+from emp_py.mq import publish_event  # noqa: E402
+from emp_py.redis_client import cache_get, cache_set  # noqa: E402
 
 app = FastAPI(title="EMP device_service", version="0.1.0")
 
@@ -118,4 +120,22 @@ def heartbeat(body: HeartbeatIn, db: Session = Depends(get_db)):
         d.last_seen_at = datetime.utcnow()
         d.updated_at = datetime.utcnow()
     db.commit()
-    return {"ok": True, "device_code": body.device_code, "status": body.status}
+    # Redis 在线缓存（TTL 30s）+ 领域事件
+    cache_set(f"device:online:{body.device_code}", body.status, ttl=30)
+    published = publish_event(
+        "emp.device.heartbeat",
+        {"device_code": body.device_code, "status": body.status, "platform": body.platform},
+    )
+    return {
+        "ok": True,
+        "device_code": body.device_code,
+        "status": body.status,
+        "cached": cache_get(f"device:online:{body.device_code}"),
+        "mq_published": published,
+    }
+
+
+@app.get("/api/devices/{device_code}/online")
+def online_status(device_code: str):
+    """读 Redis/内存缓存的在线状态（不打库）。"""
+    return {"device_code": device_code, "cached_status": cache_get(f"device:online:{device_code}")}
