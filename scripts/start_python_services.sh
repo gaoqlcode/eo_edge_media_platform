@@ -1,29 +1,40 @@
 #!/usr/bin/env bash
 # 文件：scripts/start_python_services.sh
-# 内容：启动全部 Python 微服务（后台）
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-export PATH="${HOME}/.local/bin:${PATH}"
+EMP_BIN="${ROOT}/.tools/mamba_root/envs/emp/bin"
+if [[ -x "${EMP_BIN}/python" ]]; then
+  PYTHON="${EMP_BIN}/python"
+  export PATH="${EMP_BIN}:${HOME}/.local/bin:${PATH}"
+else
+  PYTHON="$(command -v python3)"
+  export PATH="${HOME}/.local/bin:${PATH}"
+fi
 export PYTHONPATH="${ROOT}/platform/libs/emp_py:${PYTHONPATH:-}"
-export DATABASE_URL="${DATABASE_URL:-sqlite:////tmp/emp_platform.db}"
-export EMP_MEMORY_BUS=1
+# 默认强制本机 micromamba PostgreSQL（可用 EMP_DATABASE_URL 覆盖）
+# 注意：不要沿用 shell 里残留的 sqlite DATABASE_URL
+if [[ -n "${EMP_DATABASE_URL:-}" ]]; then
+  export DATABASE_URL="${EMP_DATABASE_URL}"
+elif [[ "${EMP_USE_SQLITE:-0}" == "1" ]]; then
+  export DATABASE_URL="sqlite:////tmp/emp_platform.db"
+else
+  export DATABASE_URL="postgresql+psycopg2://emp@127.0.0.1:55432/emp_platform"
+fi
+export REDIS_URL="${EMP_REDIS_URL:-redis://127.0.0.1:56379/0}"
+export EMP_MEMORY_BUS="${EMP_MEMORY_BUS:-0}"
 
 mkdir -p "${ROOT}/.run"
-
-# 停旧进程
 pkill -f "uvicorn app:app" 2>/dev/null || true
 sleep 1
 
-# 单次初始化库表，避免多服务并发 create_all 竞态
-rm -f /tmp/emp_platform.db
-python3 -c "from emp_py.db import init_db; init_db(); print('db init ok')"
+"${PYTHON}" -c "from emp_py.db import init_db; init_db(); print('db init ok')"
 
 start_one() {
   local name="$1" port="$2" dir="$3"
   echo "[start] ${name} :${port}"
   (
     cd "${ROOT}/platform/services/${dir}"
-    nohup python3 -m uvicorn app:app --host 127.0.0.1 --port "${port}" \
+    nohup "${PYTHON}" -m uvicorn app:app --host 127.0.0.1 --port "${port}" \
       >"${ROOT}/.run/${name}.log" 2>&1 &
     echo $! >"${ROOT}/.run/${name}.pid"
   )
@@ -42,9 +53,9 @@ for p in 8101 8102 8103 8104 8105; do
   if curl -sf "http://127.0.0.1:${p}/health"; then
     echo " port ${p} OK"
   else
-    echo " port ${p} FAIL"
-    fail=1
+    echo " port ${p} FAIL"; fail=1
   fi
 done
-echo "logs: ${ROOT}/.run/*.log"
+echo "PYTHON=${PYTHON}"
+echo "DATABASE_URL=${DATABASE_URL}"
 exit "${fail}"

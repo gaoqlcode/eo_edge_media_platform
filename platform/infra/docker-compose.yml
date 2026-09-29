@@ -1,8 +1,10 @@
 # =============================================================================
 # 文件：docker-compose.yml
 # 内容：平台基础设施（PostgreSQL / Redis / RabbitMQ / Traefik / 观测）
-# 用法：在有 Docker 的机器上：docker compose -f platform/infra/docker-compose.yml up -d
+# 用法：sudo docker-compose -f platform/infra/docker-compose.yml up -d
 # =============================================================================
+version: "3.3"
+
 services:
   postgres:
     image: postgres:16
