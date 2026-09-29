@@ -1,0 +1,58 @@
+# =============================================================================
+# EO Edge Media Platform — Git 忽略规则
+# 说明：源码入库；构建产物、密钥、虚拟环境不入库
+# =============================================================================
+
+# 构建与 IDE
+build/
+cmake-build-*/
+out/
+.vscode/
+.idea/
+*.user
+*.autosave
+
+# 编译产物（插件源码入库，.so 由本地编译生成）
+*.o
+*.a
+*.so
+*.so.*
+*.dylib
+*.exe
+*.out
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+dist/
+
+# 环境与密钥（只用 .env.example）
+.env
+.env.*
+!.env.example
+*.pem
+id_rsa
+id_ed25519
+
+# 数据与日志
+data/
+logs/
+*.log
+*.sqlite3
+
+# 系统杂项
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# Qt
+*.pro.user*
+moc_*.cpp
+ui_*.h
+qrc_*.cpp
