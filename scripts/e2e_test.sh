@@ -89,26 +89,30 @@ print("idempotency OK")
 PY
 "${PYTHON}" "${ROOT}/platform/services/media_worker/worker.py" outbox || true
 
-echo "== edge_agent + preview =="
+echo "== edge_agent + preview + vod =="
 cd "${ROOT}"
 EMP_FRAMES=5 EMP_DEVICE_CODE=edge-e2e-pg EMP_API_KEY=emp-dev-key \
+  EMP_ROOT="${ROOT}" EMP_ENCODE_H264=1 \
   EMP_DATA_ROOT="${ROOT}/data/sessions" EMP_PREVIEW_ROOT="${ROOT}/data/preview" \
   "${ROOT}/build/bin/edge_agent" "${ROOT}/build/lib/libemp_cam_Virtual.so"
-# 可选 H.264：取含 JPEG 的最新会话目录
-SESS_DIR=""
-while IFS= read -r d; do
-  if [[ -f "${d}/cam0/0.jpg" ]]; then SESS_DIR="$d"; break; fi
-done < <(ls -dt "${ROOT}"/data/sessions/sess-edge-* 2>/dev/null || true)
-if [[ -n "${SESS_DIR}" ]] && command -v ffmpeg >/dev/null 2>&1; then
-  bash "${ROOT}/scripts/encode_session_h264.sh" "${SESS_DIR}/cam0" /tmp/emp_e2e_preview.mp4 || true
-  file /tmp/emp_e2e_preview.mp4 || true
-fi
-"${ROOT}/build/bin/media_gateway" >/tmp/emp_gw.log 2>&1 &
+SESS_CODE=$(ls -dt "${ROOT}"/data/sessions/sess-edge-* 2>/dev/null | head -1 | xargs -I{} basename {})
+EMP_PREVIEW_ROOT="${ROOT}/data/preview" EMP_SESSION_ROOT="${ROOT}/data/sessions" \
+  "${ROOT}/build/bin/media_gateway" >/tmp/emp_gw.log 2>&1 &
 GW_PID=$!; sleep 0.5
 echo PING | nc -w 1 127.0.0.1 9100 || true
 curl -sf -o /tmp/emp_preview.jpg "http://127.0.0.1:9101/preview?device=edge-e2e-pg"
 file /tmp/emp_preview.jpg || true
 ls -la /tmp/emp_preview.jpg
+# VOD
+if [[ -n "${SESS_CODE}" ]]; then
+  curl -sf -o /tmp/emp_vod.mp4 "http://127.0.0.1:9101/vod?session=${SESS_CODE}"
+  file /tmp/emp_vod.mp4 || true
+  curl -sf "http://127.0.0.1:8103/api/playback/${SESS_CODE}" | head -c 400; echo
+fi
+# metrics auth fail counter
+curl -sf "http://127.0.0.1:8101/metrics" | grep -E 'emp_auth_fail|emp_http_requests' | head -5 || true
+# traceparent header
+curl -sI http://127.0.0.1:8105/health | grep -iE 'traceparent|X-Trace-Id|X-Span-Id' || true
 kill "${GW_PID}" 2>/dev/null || true
 bash "${ROOT}/scripts/stop_python_services.sh"
 echo "E2E PASSED (enterprise checks)"

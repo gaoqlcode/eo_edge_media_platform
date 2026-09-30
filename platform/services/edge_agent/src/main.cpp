@@ -134,6 +134,27 @@ int main(int argc, char** argv) {
         http_post_json("http://127.0.0.1:8103/api/assets", asset.str());
     }
 
+    // 可选软编 H.264（EMP_ENCODE_H264=0 关闭；默认尝试）
+    const char* enc = std::getenv("EMP_ENCODE_H264");
+    const bool do_encode = !(enc && std::string(enc) == "0");
+    if (do_encode) {
+        const char* root_env = std::getenv("EMP_ROOT");
+        std::string script = root_env ? (std::string(root_env) + "/scripts/encode_session_h264.sh")
+                                      : "scripts/encode_session_h264.sh";
+        const std::string mp4 = session_dir + "/preview.mp4";
+        const std::string cmd = "bash '" + script + "' '" + session_dir + "' '" + mp4 + "'";
+        const int rc = std::system(cmd.c_str());
+        if (rc == 0) {
+            log.info("H.264 成片: " + mp4);
+            std::ostringstream asset;
+            asset << "{\"session_code\":\"" << session_code
+                  << "\",\"asset_type\":\"h264_mp4\",\"relative_path\":\"cam0/preview.mp4\",\"byte_size\":0}";
+            http_post_json("http://127.0.0.1:8103/api/assets", asset.str());
+        } else {
+            log.warn("H.264 编码跳过或失败（需 ffmpeg）");
+        }
+    }
+
     loader.destroy(cam);
     log.info("edge_agent 正常退出 session=" + session_code);
     return 0;

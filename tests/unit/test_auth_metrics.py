@@ -94,8 +94,12 @@ def test_idempotency():
 
 
 def test_trace_extract():
-    from emp_py.tracing import extract_or_create_trace_id
+    from emp_py.tracing import extract_or_create_trace_id, format_traceparent, span
 
     assert extract_or_create_trace_id("abc") == "abc"
     tid = extract_or_create_trace_id(None, "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01")
     assert tid.startswith("0123456789abcdef")
+    tp = format_traceparent("aabbccdd" * 4, "1122334455667788")
+    assert tp.startswith("00-") and tp.endswith("-01")
+    with span("unit") as sid:
+        assert len(sid) == 16

@@ -1,11 +1,11 @@
 /**
  * @file main.cpp
- * @brief media_gateway：TCP 会话命令 + HTTP 预览 JPEG
- * 对照 eo_pod_gcs / PreviewServer：客户端拉最新一帧预览
+ * @brief media_gateway：TCP 会话命令 + HTTP 预览 JPEG + VOD 成片
  *
  * HTTP:
  *   GET /health
  *   GET /preview?device=edge-sim-001   -> image/jpeg
+ *   GET /vod?session=sess-edge-xxx     -> video/mp4 (cam0/preview.mp4)
  * TCP 文本:
  *   PING / REGISTER <sid> <device> / LIST
  */
@@ -27,8 +27,20 @@
 
 namespace {
 std::mutex g_mu;
-std::map<std::string, std::string> g_sessions;  // session -> device
-std::string g_preview_root = "data/preview";     // 每设备 latest.jpg
+std::map<std::string, std::string> g_sessions;
+std::string g_preview_root = "data/preview";
+std::string g_session_root = "data/sessions";
+
+std::string query_param(const std::string& path, const std::string& key, const std::string& def) {
+    const auto q = path.find(key + "=");
+    if (q == std::string::npos) return def;
+    std::string v = path.substr(q + key.size() + 1);
+    const auto amp = v.find('&');
+    if (amp != std::string::npos) v = v.substr(0, amp);
+    const auto sp = v.find(' ');
+    if (sp != std::string::npos) v = v.substr(0, sp);
+    return v;
+}
 
 std::string handle_tcp_line(const std::string& line) {
     if (line == "PING") return "PONG\n";
@@ -51,7 +63,6 @@ std::string handle_tcp_line(const std::string& line) {
     return "ERR unknown\n";
 }
 
-/** @brief 读取整文件到内存 */
 bool read_file(const std::string& path, std::vector<char>& out) {
     std::ifstream ifs(path, std::ios::binary);
     if (!ifs) return false;
@@ -59,8 +70,19 @@ bool read_file(const std::string& path, std::vector<char>& out) {
     return !out.empty();
 }
 
+void send_bytes(int cfd, const std::string& content_type, const std::vector<char>& bytes) {
+    std::ostringstream hdr;
+    hdr << "HTTP/1.1 200 OK\r\n"
+        << "Content-Type: " << content_type << "\r\n"
+        << "Content-Length: " << bytes.size() << "\r\n"
+        << "Connection: close\r\n\r\n";
+    const auto hs = hdr.str();
+    write(cfd, hs.data(), hs.size());
+    write(cfd, bytes.data(), bytes.size());
+    close(cfd);
+}
+
 void handle_http_client(int cfd) {
-    emp::Logger log("media_gateway_http");
     char buf[2048];
     const ssize_t n = read(cfd, buf, sizeof(buf) - 1);
     if (n <= 0) {
@@ -86,32 +108,30 @@ void handle_http_client(int cfd) {
         body = "{\"service\":\"media_gateway\",\"status\":\"ok\"}\n";
         content_type = "application/json";
     } else if (path.rfind("/preview", 0) == 0) {
-        std::string device = "edge-sim-001";
-        const auto q = path.find("device=");
-        if (q != std::string::npos) {
-            device = path.substr(q + 7);
-            const auto amp = device.find('&');
-            if (amp != std::string::npos) device = device.substr(0, amp);
-            const auto sp = device.find(' ');
-            if (sp != std::string::npos) device = device.substr(0, sp);
-        }
+        const std::string device = query_param(path, "device", "edge-sim-001");
         const std::string jpg = g_preview_root + "/" + device + "/latest.jpg";
         std::vector<char> bytes;
         if (read_file(jpg, bytes)) {
-            content_type = "image/jpeg";
-            std::ostringstream hdr;
-            hdr << "HTTP/1.1 200 OK\r\n"
-                << "Content-Type: " << content_type << "\r\n"
-                << "Content-Length: " << bytes.size() << "\r\n"
-                << "Connection: close\r\n\r\n";
-            const auto hs = hdr.str();
-            write(cfd, hs.data(), hs.size());
-            write(cfd, bytes.data(), bytes.size());
-            close(cfd);
+            send_bytes(cfd, "image/jpeg", bytes);
             return;
         }
         status = "404 Not Found";
         body = "preview not found: " + jpg + "\n";
+    } else if (path.rfind("/vod", 0) == 0) {
+        const std::string session = query_param(path, "session", "");
+        if (session.empty() || session.find("..") != std::string::npos || session.find('/') != std::string::npos) {
+            status = "400 Bad Request";
+            body = "need session=...\n";
+        } else {
+            const std::string mp4 = g_session_root + "/" + session + "/cam0/preview.mp4";
+            std::vector<char> bytes;
+            if (read_file(mp4, bytes)) {
+                send_bytes(cfd, "video/mp4", bytes);
+                return;
+            }
+            status = "404 Not Found";
+            body = "vod not found: " + mp4 + "\n";
+        }
     } else {
         status = "404 Not Found";
         body = "not found\n";
@@ -167,11 +187,10 @@ void http_loop(int port) {
     addr.sin_port = htons(port);
     bind(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr));
     listen(fd, 32);
-    log.info("HTTP 预览监听 :" + std::to_string(port));
+    log.info("HTTP 预览/VOD 监听 :" + std::to_string(port));
     while (true) {
         int cfd = accept(fd, nullptr, nullptr);
         if (cfd < 0) continue;
-        // 每连接一线程（教学版；生产用线程池/epoll）
         std::thread(handle_http_client, cfd).detach();
     }
 }
@@ -182,6 +201,9 @@ int main(int argc, char** argv) {
     emp::Logger log("media_gateway");
     if (const char* root = std::getenv("EMP_PREVIEW_ROOT")) {
         g_preview_root = root;
+    }
+    if (const char* sroot = std::getenv("EMP_SESSION_ROOT")) {
+        g_session_root = sroot;
     }
     const int tcp_port = 9100;
     const int http_port = 9101;
