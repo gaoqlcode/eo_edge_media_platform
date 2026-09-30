@@ -58,10 +58,37 @@ def test_dual_auth_jwt_and_key():
     assert r2.json()["sub"] == "alice"
 
 
+def test_device_token_and_rbac():
+    from fastapi import Depends, FastAPI
+    from fastapi.testclient import TestClient
+    from emp_py.auth import require_auth, require_roles
+    from emp_py.jwt_auth import issue_token
+
+    app = FastAPI()
+
+    @app.get("/any")
+    def any_auth(auth: dict = Depends(require_auth)):
+        return auth
+
+    @app.get("/admin-only")
+    def admin_only(auth: dict = Depends(require_roles("admin", "service"))):
+        return auth
+
+    client = TestClient(app)
+    assert client.get("/any", headers={"X-Device-Token": "emp-dev-key"}).status_code == 200
+    assert client.get("/any", headers={"X-Device-Token": "emp-dev-key"}).json()["role"] == "device"
+    # device 不能进 admin-only
+    assert client.get("/admin-only", headers={"X-Device-Token": "emp-dev-key"}).status_code == 403
+    assert client.get("/admin-only", headers={"X-API-Key": "emp-dev-key"}).status_code == 200
+    tok = issue_token("bob", role="operator")["access_token"]
+    assert client.get("/admin-only", headers={"Authorization": f"Bearer {tok}"}).status_code == 403
+
+
 def test_idempotency():
+    import uuid
     from emp_py.idempotency import already_processed
 
-    eid = "unit-idem-xyz"
+    eid = f"unit-idem-{uuid.uuid4().hex}"
     assert already_processed(eid) is False
     assert already_processed(eid) is True
 

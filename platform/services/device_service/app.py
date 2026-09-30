@@ -12,12 +12,13 @@ from sqlalchemy.orm import Session
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "libs" / "emp_py"))
 
-from emp_py.auth import require_auth  # noqa: E402
+from emp_py.auth import require_roles  # noqa: E402
 from emp_py.db import get_db, init_db  # noqa: E402
 from emp_py.fastapi_app import create_service_app  # noqa: E402
 from emp_py.models import Device, Tenant  # noqa: E402
 from emp_py.mq import publish_event  # noqa: E402
 from emp_py.redis_client import cache_get, cache_set  # noqa: E402
+from emp_py.audit import write_audit  # noqa: E402
 
 app = create_service_app("device_service")
 
@@ -69,7 +70,7 @@ def list_devices(db: Session = Depends(get_db)):
 def create_device(
     body: DeviceCreate,
     db: Session = Depends(get_db),
-    _auth: dict = Depends(require_auth),
+    auth: dict = Depends(require_roles("admin", "service")),
 ):
     tenant = db.query(Tenant).filter_by(code="default").first()
     if not tenant:
@@ -92,7 +93,16 @@ def create_device(
     db.add(d)
     db.commit()
     db.refresh(d)
-    return {"id": d.id, "device_code": d.device_code}
+    out = {"id": d.id, "device_code": d.device_code}
+    write_audit(
+        db,
+        operator=str(auth.get("sub")),
+        command="device.create",
+        request=body.dict(),
+        result=out,
+        device_id=d.id,
+    )
+    return out
 
 
 @app.post("/api/devices/heartbeat")

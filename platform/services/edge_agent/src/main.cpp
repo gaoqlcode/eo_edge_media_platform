@@ -16,12 +16,16 @@
 namespace {
 
 bool http_post_json(const std::string& url, const std::string& json) {
+    // 优先设备凭证；未设置则回退共享 API Key（开发默认）
+    const char* device_tok = std::getenv("EMP_DEVICE_TOKEN");
     const char* api_key = std::getenv("EMP_API_KEY");
     if (!api_key) api_key = "emp-dev-key";
+    if (!device_tok) device_tok = api_key;
     const std::string cmd =
         "curl -sS -m 2 -X POST '" + url +
         "' -H 'Content-Type: application/json'"
         " -H 'X-API-Key: " + api_key + "'"
+        " -H 'X-Device-Token: " + device_tok + "'"
         " -d '" + json + "' >/dev/null 2>&1";
     return std::system(cmd.c_str()) == 0;
 }

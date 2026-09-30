@@ -60,6 +60,9 @@ curl -sf "http://127.0.0.1:8103/api/playback/${SESSION}" | head -c 300; echo
 curl -sf -X POST http://127.0.0.1:8104/api/alarms "${AUTH[@]}" \
   -H 'Content-Type: application/json' \
   -d '{"device_code":"edge-e2e-pg","severity":"info","code":"E2E_PG_OK","message":"postgres e2e"}'
+# 审计表应有写入
+psql -h 127.0.0.1 -p 55432 -U emp -d emp_platform -c \
+  "SELECT command,operator FROM command_audits ORDER BY created_at DESC LIMIT 3;"
 curl -sf http://127.0.0.1:8105/api/bff/dashboard | head -c 400; echo
 psql -h 127.0.0.1 -p 55432 -U emp -d emp_platform -c \
   "SELECT device_code,status FROM devices WHERE device_code='edge-e2e-pg';"
@@ -77,9 +80,11 @@ curl -sf http://127.0.0.1:8105/api/bff/me -H "Authorization: Bearer ${TOK}"; ech
 
 echo "== worker idempotency =="
 "${PYTHON}" - <<'PY'
+import uuid
 from emp_py.idempotency import already_processed
-assert already_processed("e2e-idem-1", body="{}") is False
-assert already_processed("e2e-idem-1", body="{}") is True
+eid = f"e2e-idem-{uuid.uuid4().hex}"
+assert already_processed(eid) is False
+assert already_processed(eid) is True
 print("idempotency OK")
 PY
 "${PYTHON}" "${ROOT}/platform/services/media_worker/worker.py" outbox || true

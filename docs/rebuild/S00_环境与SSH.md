@@ -8,7 +8,7 @@
 
 ## 2. 前置
 
-无。
+无。详解见学习章：[05_环境软件下载与工具链](../learning/05_环境软件下载与工具链.md)。
 
 ## 3. 操作
 
@@ -16,45 +16,34 @@
 
 ```bash
 sudo apt update
-sudo apt install -y git build-essential cmake python3 python3-venv python3-pip docker.io docker-compose-v2 curl
+sudo apt install -y \
+  git build-essential cmake pkg-config \
+  libjpeg-dev ffmpeg \
+  python3 python3-venv python3-pip \
+  docker.io docker-compose curl ca-certificates
 ```
 
-（若包名因发行版不同略有差异，以能运行为准并在本页 `[!]` 记录。）
+额外：本仓可用 micromamba 起 PG（见 `scripts/start_infra_local.sh`），不必强依赖 Docker。
 
-### 3.2 SSH 公钥（本机已生成示例）
-
-若尚无密钥：
+### 3.2 SSH 公钥
 
 ```bash
 ssh-keygen -t ed25519 -C "gaoqlcode@github" -f ~/.ssh/id_ed25519 -N ""
 eval "$(ssh-agent -s)"
 ssh-add ~/.ssh/id_ed25519
-```
-
-查看公钥：
-
-```bash
 cat ~/.ssh/id_ed25519.pub
 ```
 
-到 GitHub：**Settings → SSH and GPG keys → New SSH key**，粘贴公钥并保存。
+GitHub：**Settings → SSH and GPG keys → New SSH key**。验证：`ssh -T git@github.com`。
 
-验证：
+Git 日常流程见：[Git 使用全过程](../ops/git_workflow.md)。
 
-```bash
-ssh -T git@github.com
-```
+## 4. 设计说明
 
-期望看到类似：`Hi gaoqlcode! You've successfully authenticated...`
-
-## 4. 关键设计
-
-用 SSH 而非 HTTPS 密码，便于本地与 CI/Agent 自动化推送；私钥永不入库。
+用 SSH 而非 HTTPS 密码；私钥永不入库。
 
 ## 5. 验收
 
-- [ ] `git --version` 有输出  
-- [ ] `cat ~/.ssh/id_ed25519.pub` 有一行 `ssh-ed25519 ...`  
-- [ ] `ssh -T git@github.com` 认证成功  
-
-**你现在需要做的**：把公钥加到 GitHub 后告诉助手「SSH 已配置」，再继续 S01 的 push。
+- [x] `git --version` / `cmake --version` 可用  
+- [x] SSH 认证 GitHub 成功  
+- [x] （推荐）`libjpeg-dev` 已装，便于编 edge_agent  

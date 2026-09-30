@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "libs" / "emp_py"))
 
+from emp_py.audit import write_audit  # noqa: E402
 from emp_py.auth import require_auth  # noqa: E402
 from emp_py.db import get_db, init_db  # noqa: E402
 from emp_py.fastapi_app import create_service_app  # noqa: E402
@@ -40,7 +41,7 @@ def on_startup():
 def start_session(
     body: SessionStart,
     db: Session = Depends(get_db),
-    _auth: dict = Depends(require_auth),
+    auth: dict = Depends(require_auth),
 ):
     d = db.query(Device).filter_by(device_code=body.device_code).first()
     if not d:
@@ -62,7 +63,16 @@ def start_session(
     db.add(s)
     db.commit()
     db.refresh(s)
-    return {"id": s.id, "session_code": s.session_code, "status": s.status}
+    out = {"id": s.id, "session_code": s.session_code, "status": s.status}
+    write_audit(
+        db,
+        operator=str(auth.get("sub")),
+        command="session.start",
+        request=body.dict(),
+        result=out,
+        device_id=d.id,
+    )
+    return out
 
 
 @app.post("/api/sessions/end")

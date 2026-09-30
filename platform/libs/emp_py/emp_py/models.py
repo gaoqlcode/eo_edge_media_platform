@@ -86,3 +86,14 @@ class AlarmEvent(Base):
     payload_json = Column(JSON, default=dict)
     occurred_at = Column(DateTime, default=datetime.utcnow)
     acked = Column(Boolean, default=False)
+
+
+class CommandAudit(Base):
+    __tablename__ = "command_audits"
+    id = Column(String(36), primary_key=True, default=_uuid)
+    device_id = Column(String(36), nullable=True)
+    operator = Column(String(64), nullable=False, default="system")
+    command = Column(String(64), nullable=False)
+    request_json = Column(JSON, default=dict)
+    result_json = Column(JSON, default=dict)
+    created_at = Column(DateTime, default=datetime.utcnow)

@@ -4,11 +4,11 @@
 
 ## 现在是什么水平？
 
-**可联调的企业骨架 + 已开始加固**，还不是可直接上生产的完整产品。  
-详见：[docs/architecture/企业级成熟度.md](docs/architecture/企业级成熟度.md)
+**可联调企业骨架 + 学习文档详解 + RBAC/审计起步**，尚非完整生产产品。  
+详见：[企业级成熟度](docs/architecture/企业级成熟度.md) · [学习路线图](docs/architecture/企业级与学习路线图.md)
 
-已有：微服务拆分、PG、Redis/MQ、插件边端、API Key、结构化日志、`/metrics`、Traefik/Prometheus、CI、E2E。  
-仍缺：真视频编码预览、JWT/RBAC、全链路 tracing、板端硬编与完整运维。
+已有：微服务、PG/Redis/MQ、插件边端、JPEG 预览、JWT/API Key/设备 Token、RBAC、审计、DLQ 幂等、e2e、详解学习章（环境/库/Git/语法…）。  
+仍缺：OpenTelemetry、真流媒体、板端硬编与完整运维手册。
 
 ## 快速验收
 
@@ -22,8 +22,9 @@ bash scripts/e2e_test.sh
 ## 文档
 
 1. 复刻顺序：[`docs/rebuild/00_复刻总索引.md`](docs/rebuild/00_复刻总索引.md)
-2. 多智能体：[`AGENTS.md`](AGENTS.md)
-3. 学习：[`docs/learning/`](docs/learning/)
+2. 学习入口：[`docs/learning/00_入学与复刻入口.md`](docs/learning/00_入学与复刻入口.md)（含环境下载、库用法、Git）
+3. 路线图：[`docs/architecture/企业级与学习路线图.md`](docs/architecture/企业级与学习路线图.md)
+4. 多智能体：[`AGENTS.md`](AGENTS.md)
 
 ## 参考工程（只读）
 

@@ -10,7 +10,8 @@ from sqlalchemy.orm import Session
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "libs" / "emp_py"))
 
-from emp_py.auth import require_auth  # noqa: E402
+from emp_py.audit import write_audit  # noqa: E402
+from emp_py.auth import require_roles  # noqa: E402
 from emp_py.db import get_db, init_db  # noqa: E402
 from emp_py.fastapi_app import create_service_app  # noqa: E402
 from emp_py.models import AlarmEvent, Device  # noqa: E402
@@ -31,7 +32,11 @@ def on_startup():
 
 
 @app.post("/api/alarms")
-def create_alarm(body: AlarmIn, db: Session = Depends(get_db), _auth: dict = Depends(require_auth)):
+def create_alarm(
+    body: AlarmIn,
+    db: Session = Depends(get_db),
+    auth: dict = Depends(require_roles("admin", "service", "operator")),
+):
     device_id = None
     if body.device_code:
         d = db.query(Device).filter_by(device_code=body.device_code).first()
@@ -45,7 +50,16 @@ def create_alarm(body: AlarmIn, db: Session = Depends(get_db), _auth: dict = Dep
     db.add(a)
     db.commit()
     db.refresh(a)
-    return {"id": a.id, "code": a.code}
+    out = {"id": a.id, "code": a.code}
+    write_audit(
+        db,
+        operator=str(auth.get("sub")),
+        command="alarm.create",
+        request=body.dict(),
+        result=out,
+        device_id=device_id,
+    )
+    return out
 
 
 @app.get("/api/alarms")
@@ -65,10 +79,23 @@ def list_alarms(db: Session = Depends(get_db)):
 
 
 @app.post("/api/alarms/{alarm_id}/ack")
-def ack_alarm(alarm_id: str, db: Session = Depends(get_db), _auth: dict = Depends(require_auth)):
+def ack_alarm(
+    alarm_id: str,
+    db: Session = Depends(get_db),
+    auth: dict = Depends(require_roles("admin", "service", "operator")),
+):
     a = db.query(AlarmEvent).filter_by(id=alarm_id).first()
     if not a:
         raise HTTPException(404, "alarm not found")
     a.acked = True
     db.commit()
-    return {"id": a.id, "acked": True}
+    out = {"id": a.id, "acked": True}
+    write_audit(
+        db,
+        operator=str(auth.get("sub")),
+        command="alarm.ack",
+        request={"alarm_id": alarm_id},
+        result=out,
+        device_id=a.device_id,
+    )
+    return out
