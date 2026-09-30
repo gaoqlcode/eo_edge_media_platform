@@ -6,7 +6,7 @@ EMP_BIN="${ROOT}/.tools/mamba_root/envs/emp/bin"
 export PATH="${EMP_BIN}:${HOME}/.local/bin:/usr/bin:${PATH}"
 export PYTHONPATH="${ROOT}/platform/libs/emp_py:${PYTHONPATH:-}"
 export DATABASE_URL="postgresql+psycopg2://emp@127.0.0.1:55432/emp_platform"
-export REDIS_URL="redis://127.0.0.1:6379/0"
+export REDIS_URL="redis://127.0.0.1:56379/0"
 export RABBITMQ_URL="amqp://emp:emp_dev_pass@127.0.0.1:5672/"
 export EMP_API_KEY="emp-dev-key"
 AUTH=(-H "X-API-Key: ${EMP_API_KEY}")
@@ -21,8 +21,8 @@ echo "== unit tests =="
 ( cd "${ROOT}" && PYTHONPATH="${ROOT}/platform/libs/emp_py" "${PYTHON}" -m pytest -q tests/unit )
 
 echo "== ensure python deps =="
-"${PYTHON}" -c "import fastapi,sqlalchemy" 2>/dev/null || \
-  "${PYTHON}" -m pip install -q fastapi 'uvicorn[standard]' sqlalchemy psycopg2-binary 'pydantic<2' httpx redis pika
+"${PYTHON}" -c "import fastapi,sqlalchemy,jwt" 2>/dev/null || \
+  "${PYTHON}" -m pip install -q fastapi 'uvicorn[standard]' sqlalchemy psycopg2-binary 'pydantic<2' httpx redis pika PyJWT
 
 echo "== build C++ =="
 cmake -S "${ROOT}" -B "${ROOT}/build" -DCMAKE_BUILD_TYPE=Release
@@ -61,14 +61,21 @@ curl -sf http://127.0.0.1:8105/api/bff/dashboard | head -c 400; echo
 psql -h 127.0.0.1 -p 55432 -U emp -d emp_platform -c \
   "SELECT device_code,status FROM devices WHERE device_code='edge-e2e-pg';"
 
-echo "== edge_agent =="
+echo "== edge_agent + preview =="
 EMP_FRAMES=5 EMP_DEVICE_CODE=edge-e2e-pg \
   "${ROOT}/build/bin/edge_agent" "${ROOT}/build/lib/libemp_cam_Virtual.so"
-
-echo "== media_gateway =="
 "${ROOT}/build/bin/media_gateway" >/tmp/emp_gw.log 2>&1 &
 GW_PID=$!; sleep 0.5
 echo PING | nc -w 1 127.0.0.1 9100 || true
+# HTTP 预览
+curl -sf -o /tmp/emp_preview.jpg "http://127.0.0.1:9101/preview?device=edge-e2e-pg"
+file /tmp/emp_preview.jpg || true
+ls -la /tmp/emp_preview.jpg
+# JWT
+TOK=$(curl -sf -X POST http://127.0.0.1:8105/api/bff/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"admin123"}' | "${PYTHON}" -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+curl -sf http://127.0.0.1:8105/api/bff/me -H "Authorization: Bearer ${TOK}"; echo
 kill "${GW_PID}" 2>/dev/null || true
 bash "${ROOT}/scripts/stop_python_services.sh"
 echo "E2E PASSED (enterprise checks)"

@@ -20,7 +20,7 @@ elif [[ "${EMP_USE_SQLITE:-0}" == "1" ]]; then
 else
   export DATABASE_URL="postgresql+psycopg2://emp@127.0.0.1:55432/emp_platform"
 fi
-export REDIS_URL="${EMP_REDIS_URL:-redis://127.0.0.1:6379/0}"
+export REDIS_URL="${EMP_REDIS_URL:-redis://127.0.0.1:56379/0}"
 export RABBITMQ_URL="${EMP_RABBITMQ_URL:-amqp://emp:emp_dev_pass@127.0.0.1:5672/}"
 export EMP_MEMORY_BUS="${EMP_MEMORY_BUS:-0}"
 

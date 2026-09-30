@@ -4,15 +4,17 @@ project(eo_edge_media_platform LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+find_package(Threads REQUIRED)
 
 set(EMP_COMMON_DIR ${CMAKE_SOURCE_DIR}/platform/libs/emp_common)
 
 add_library(emp_common STATIC
   ${EMP_COMMON_DIR}/src/Logger.cpp
   ${EMP_COMMON_DIR}/src/PluginLoader.cpp
+  ${EMP_COMMON_DIR}/src/JpegWriter.cpp
 )
 target_include_directories(emp_common PUBLIC ${EMP_COMMON_DIR}/include)
-target_link_libraries(emp_common PUBLIC dl)
+target_link_libraries(emp_common PUBLIC dl jpeg)
 
 # Virtual 相机插件
 add_library(emp_cam_Virtual SHARED
@@ -39,7 +41,7 @@ target_link_libraries(edge_agent PRIVATE emp_common)
 set_target_properties(edge_agent PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 add_executable(media_gateway platform/services/media_gateway/src/main.cpp)
-target_link_libraries(media_gateway PRIVATE emp_common)
+target_link_libraries(media_gateway PRIVATE emp_common Threads::Threads)
 set_target_properties(media_gateway PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 # labs

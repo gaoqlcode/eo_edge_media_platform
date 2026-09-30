@@ -1,8 +1,8 @@
 /**
  * @file main.cpp
- * @brief edge_agent：插件采帧 + 环缓 + 心跳 + 会话目录落盘元数据
- * 对照 eo_pod_server：插件 ABI / CameraHub / 会话目录思想
+ * @brief edge_agent：插件采帧 → JPEG 落盘 → 预览 latest.jpg → 心跳/会话 API
  */
+#include "emp/JpegWriter.h"
 #include "emp/Logger.h"
 #include "emp/PluginLoader.h"
 #include "emp/RingBuffer.h"
@@ -12,7 +12,6 @@
 #include <fstream>
 #include <sstream>
 #include <string>
-#include <sys/stat.h>
 
 namespace {
 
@@ -23,10 +22,8 @@ bool http_post_json(const std::string& url, const std::string& json) {
     return std::system(cmd.c_str()) == 0;
 }
 
-/** @brief 递归创建目录（简化 mkdir -p） */
 void mkdir_p(const std::string& path) {
-    std::string cmd = "mkdir -p '" + path + "'";
-    std::system(cmd.c_str());
+    std::system(("mkdir -p '" + path + "'").c_str());
 }
 
 }  // namespace
@@ -41,9 +38,14 @@ int main(int argc, char** argv) {
     if (!session_url) session_url = "http://127.0.0.1:8102/api/sessions";
     const char* data_root = std::getenv("EMP_DATA_ROOT");
     if (!data_root) data_root = "data/sessions";
+    const char* preview_root = std::getenv("EMP_PREVIEW_ROOT");
+    if (!preview_root) preview_root = "data/preview";
 
     int max_frames = 30;
     if (const char* f = std::getenv("EMP_FRAMES")) max_frames = std::atoi(f);
+    // 预览分辨率（低于采集元数据也可，教学用固定）
+    const int pw = 320;
+    const int ph = 180;
 
     std::string plugin_path = "build/lib/libemp_cam_Virtual.so";
     if (argc >= 2) plugin_path = argv[1];
@@ -54,31 +56,29 @@ int main(int argc, char** argv) {
         return 1;
     }
     log.info(std::string("插件已加载: ") + loader.plugin_id());
-
     EmpCamera* cam = loader.create();
     if (!cam) {
         log.error("创建相机失败");
         return 1;
     }
 
-    // 会话：时间戳命名，创建目录并通知 session_service
     const std::string session_code = std::string("sess-edge-") + std::to_string(emp::now_ns());
     const std::string session_dir = std::string(data_root) + "/" + session_code + "/cam0";
+    const std::string preview_dir = std::string(preview_root) + "/" + device_code;
     mkdir_p(session_dir);
+    mkdir_p(preview_dir);
+
     {
         std::ostringstream start_json;
         start_json << "{\"device_code\":\"" << device_code
                    << "\",\"session_code\":\"" << session_code
                    << "\",\"storage_root\":\"" << data_root << "/" << session_code << "\"}";
-        if (http_post_json(std::string(session_url) + "/start", start_json.str())) {
-            log.info("会话已开始: " + session_code);
-        } else {
-            log.warn("session start 失败（服务可能未启动，仍继续本地落盘）");
-        }
+        http_post_json(std::string(session_url) + "/start", start_json.str());
+        log.info("会话已开始: " + session_code);
     }
 
     emp::RingBuffer<EmpFrameMeta> ring(8);
-    std::ofstream index_file(session_dir + "/frames.index");  // 帧索引：每行 frame_id,ts_ns,w,h
+    std::ofstream index_file(session_dir + "/frames.index");
     for (int i = 0; i < max_frames; ++i) {
         EmpFrameMeta meta{};
         if (loader.grab(cam, &meta) != 0) {
@@ -86,29 +86,30 @@ int main(int argc, char** argv) {
             continue;
         }
         ring.push_overwrite(meta);
+
+        // 生成 JPEG：会话目录一帧一份 + 覆盖 latest 供网关预览
+        auto rgb = emp::make_test_pattern_rgb(pw, ph, meta.frame_id);
+        const std::string frame_jpg = session_dir + "/" + std::to_string(meta.frame_id) + ".jpg";
+        const std::string latest_jpg = preview_dir + "/latest.jpg";
+        if (emp::write_jpeg_file(frame_jpg, pw, ph, rgb, 80)) {
+            emp::write_jpeg_file(latest_jpg, pw, ph, rgb, 80);
+        } else {
+            log.warn("写 JPEG 失败");
+        }
+
         if (index_file) {
-            index_file << meta.frame_id << "," << meta.ts_ns << "," << meta.width << ","
-                       << meta.height << "\n";
+            index_file << meta.frame_id << "," << meta.ts_ns << "," << pw << "," << ph << "," << frame_jpg
+                       << "\n";
         }
-        // 占位「帧文件」（真实 JPEG 后续接编码器）；便于 indexer 登记路径
-        {
-            std::ostringstream name;
-            name << session_dir << "/" << meta.frame_id << ".meta";
-            std::ofstream ofs(name.str());
-            ofs << "frame_id=" << meta.frame_id << "\n";
-        }
+
         if (i % 5 == 0) {
             std::ostringstream oss;
             oss << "{\"device_code\":\"" << device_code
                 << "\",\"status\":\"online\",\"platform\":\"wsl\"}";
-            if (http_post_json(device_url, oss.str())) {
-                log.info("心跳已发送");
-            } else {
-                log.warn("心跳发送失败");
-            }
+            http_post_json(device_url, oss.str());
+            log.info("心跳已发送");
         }
-        log.info("frame_id=" + std::to_string(meta.frame_id) +
-                 " ring=" + std::to_string(ring.size()));
+        log.info("frame_id=" + std::to_string(meta.frame_id) + " jpeg=" + frame_jpg);
     }
     index_file.close();
 
@@ -118,12 +119,10 @@ int main(int argc, char** argv) {
                  << "\",\"session_code\":\"" << session_code << "\",\"status\":\"closed\"}";
         http_post_json(std::string(session_url) + "/end", end_json.str());
     }
-
-    // 通知 indexer 登记索引文件
     {
         std::ostringstream asset;
         asset << "{\"session_code\":\"" << session_code
-              << "\",\"asset_type\":\"frame_index\",\"relative_path\":\"cam0/frames.index\",\"byte_size\":0}";
+              << "\",\"asset_type\":\"jpeg_seq\",\"relative_path\":\"cam0/\",\"byte_size\":0}";
         http_post_json("http://127.0.0.1:8103/api/assets", asset.str());
     }
 

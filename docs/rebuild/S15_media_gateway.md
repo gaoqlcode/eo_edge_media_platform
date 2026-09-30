@@ -4,21 +4,29 @@
 
 ## 1. 目标
 
-（实现本步时补全：本步完成后系统应具备的能力。）
+TCP 会话登记 + HTTP JPEG 预览拉取（对照地面站 PreviewServer）。
 
 ## 2. 前置
 
-见 [00_复刻总索引.md](00_复刻总索引.md) 中本步之前的步骤均应为 `[x]`。
+edge_agent 已写出 `data/preview/<device>/latest.jpg`（或设 `EMP_PREVIEW_ROOT`）。
 
 ## 3. 操作
 
-（实现时填写：命令、创建的文件路径、配置项。）
+```bash
+./build/bin/media_gateway
+# TCP
+echo PING | nc 127.0.0.1 9100
+# HTTP
+curl -o /tmp/p.jpg "http://127.0.0.1:9101/preview?device=edge-e2e-pg"
+```
+
+端口：TCP `9100`，HTTP `9101`。
 
 ## 4. 关键设计
 
-（说明模块边界 / 插件点 / 与参考工程差异。）
+边端写盘、网关读盘；教学版每连接一线程。生产用线程池/零拷贝与鉴权。
 
 ## 5. 验收
 
-- [ ] （实现时填写可复制命令与期望结果）
-
+- [x] TCP `PING` → `PONG`
+- [x] 存在 latest.jpg 时 `/preview` 返回 `image/jpeg`
