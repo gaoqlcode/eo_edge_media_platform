@@ -1,24 +1,35 @@
-# S07 · labs练习
+# S07 · labs 练习
 
 > 状态：`[x] 已完成`
 
 ## 1. 目标
 
-（实现本步时补全：本步完成后系统应具备的能力。）
+用最小可执行程序练 C++ 公共库，不依赖整套微服务。
 
 ## 2. 前置
 
-见 [00_复刻总索引.md](00_复刻总索引.md) 中本步之前的步骤均应为 `[x]`。
+S05；CMake 可编译。
 
 ## 3. 操作
 
-（实现时填写：命令、创建的文件路径、配置项。）
+| Lab | 源码 | 目标 | 练什么 |
+|-----|------|------|--------|
+| lab_syntax | `labs/cpp_syntax/hello_types.cpp` | Types + Logger | 基本类型与日志 |
+| lab_ringbuffer | `labs/data_structures/ringbuffer_demo.cpp` | RingBuffer | 有界缓冲 |
 
-## 4. 关键设计
+```bash
+cmake -S . -B build && cmake --build build --target lab_syntax lab_ringbuffer -j$(nproc)
+./build/bin/lab_syntax
+./build/bin/lab_ringbuffer
+ctest --test-dir build --output-on-failure
+```
 
-（说明模块边界 / 插件点 / 与参考工程差异。）
+## 4. 设计说明
+
+labs 链接 `emp_common`，与 edge_agent 同一套库；改 RingBuffer 后 labs 立刻反映。
+
+建议作业：把 capacity 改成 2，连续 push 5 次，手算剩余元素再跑验证。
 
 ## 5. 验收
 
-- [ ] （实现时填写可复制命令与期望结果）
-
+- [x] 两 lab 退出码 0；ctest 绿  

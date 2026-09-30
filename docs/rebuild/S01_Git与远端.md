@@ -4,16 +4,27 @@
 
 ## 1. 目标
 
-本地仓库初始化，关联 GitHub 空仓并完成首次推送。
+本地仓库关联 GitHub，并能持续 `commit` / `push`。
+
+详解过程（必读）：[Git 使用全过程](../ops/git_workflow.md)
 
 ## 2. 前置
 
-- S00 中 `ssh -T git@github.com` 已成功  
+S00：`ssh -T git@github.com` 成功。
 
 ## 3. 操作
 
+### 3.1 首次（历史已完成，新环境可对照）
+
 ```bash
 cd /home/gaoql/eo_edge_media_platform
+git remote -v
+# origin  git@github.com:gaoqlcode/eo_edge_media_platform.git
+```
+
+若从零：
+
+```bash
 git init
 git add .
 git commit -m "chore(repo): 初始化平台仓库与复刻文档骨架"
@@ -22,14 +33,26 @@ git remote add origin git@github.com:gaoqlcode/eo_edge_media_platform.git
 git push -u origin main
 ```
 
-若 `remote` 已存在：`git remote set-url origin git@github.com:gaoqlcode/eo_edge_media_platform.git`
+### 3.2 日常
 
-## 4. 关键设计
+```bash
+git status
+git add <精确路径>
+git commit -m "类型(范围): 中文说明"
+git push origin HEAD
+```
 
-`main` 为稳定线；后续用 `phase/*`、`feat/*` 分支开发（见 `docs/ops/git_workflow.md`）。
+提交类型：`feat` / `fix` / `docs` / `refactor` / `test` / `chore`。  
+改功能同步改 `docs/rebuild/Sxx` 状态。
+
+## 4. 设计说明
+
+- 主线 `main`；大改用 `feat/*` 分支。  
+- **禁止**对 `main` force push。  
+- 私钥与 `.env` 永不入库。
 
 ## 5. 验收
 
-- [ ] `git log -1` 有首提交  
-- [ ] `git remote -v` 指向 `gaoqlcode/eo_edge_media_platform.git`  
-- [ ] GitHub 网页能看到 README / docs / platform 等文件  
+- [x] `git remote -v` 指向正确仓库  
+- [x] GitHub 网页可见 README / docs / platform  
+- [x] 能完成一次文档小改 push  

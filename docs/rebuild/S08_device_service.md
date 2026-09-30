@@ -4,21 +4,46 @@
 
 ## 1. 目标
 
-（实现本步时补全：本步完成后系统应具备的能力。）
+设备注册、列表、心跳；写注册需 RBAC；心跳写 PG + Redis + MQ。
+
+端口：**8101**。学习对照：[60_微服务](../learning/60_微服务.md)
 
 ## 2. 前置
 
-见 [00_复刻总索引.md](00_复刻总索引.md) 中本步之前的步骤均应为 `[x]`。
+S04 表；S05 emp_py；infra 已起。
 
 ## 3. 操作
 
-（实现时填写：命令、创建的文件路径、配置项。）
+```bash
+bash scripts/start_python_services.sh
+curl -s http://127.0.0.1:8101/health
 
-## 4. 关键设计
+# 无密钥 → 401
+curl -s -o /dev/null -w '%{http_code}\n' -X POST http://127.0.0.1:8101/api/devices \
+  -H 'Content-Type: application/json' -d '{"device_code":"x","name":"x"}'
 
-（说明模块边界 / 插件点 / 与参考工程差异。）
+# 注册（admin/service）
+curl -s -X POST http://127.0.0.1:8101/api/devices \
+  -H 'X-API-Key: emp-dev-key' -H 'Content-Type: application/json' \
+  -d '{"device_code":"edge-demo","name":"演示边端","platform":"wsl"}'
+
+# 心跳（开放，便于边端）
+curl -s -X POST http://127.0.0.1:8101/api/devices/heartbeat \
+  -H 'Content-Type: application/json' \
+  -d '{"device_code":"edge-demo","status":"online","platform":"wsl"}'
+
+curl -s http://127.0.0.1:8101/api/devices/edge-demo/online
+curl -s http://127.0.0.1:8101/metrics | head
+```
+
+代码：`platform/services/device_service/app.py`
+
+## 4. 设计说明
+
+- 注册：`require_roles("admin","service")` + `write_audit`  
+- 心跳：更新 `last_seen_at`、`cache_set(device:online:*)`、`publish_event(emp.device.heartbeat)`  
+- 列表只读暂不鉴权（学习期）；生产可收紧  
 
 ## 5. 验收
 
-- [ ] （实现时填写可复制命令与期望结果）
-
+- [x] 401 / 注册 / 心跳 / metrics / 审计行  
