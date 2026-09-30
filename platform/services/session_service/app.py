@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "libs" / "emp_py"))
 
-from emp_py.auth import require_api_key  # noqa: E402
+from emp_py.auth import require_auth  # noqa: E402
 from emp_py.db import get_db, init_db  # noqa: E402
 from emp_py.fastapi_app import create_service_app  # noqa: E402
 from emp_py.models import Device, RecordSession  # noqa: E402
@@ -37,7 +37,11 @@ def on_startup():
 
 
 @app.post("/api/sessions/start")
-def start_session(body: SessionStart, db: Session = Depends(get_db)):
+def start_session(
+    body: SessionStart,
+    db: Session = Depends(get_db),
+    _auth: dict = Depends(require_auth),
+):
     d = db.query(Device).filter_by(device_code=body.device_code).first()
     if not d:
         raise HTTPException(404, "device not found")
@@ -62,7 +66,11 @@ def start_session(body: SessionStart, db: Session = Depends(get_db)):
 
 
 @app.post("/api/sessions/end")
-def end_session(body: SessionEnd, db: Session = Depends(get_db)):
+def end_session(
+    body: SessionEnd,
+    db: Session = Depends(get_db),
+    _auth: dict = Depends(require_auth),
+):
     d = db.query(Device).filter_by(device_code=body.device_code).first()
     if not d:
         raise HTTPException(404, "device not found")
@@ -80,7 +88,7 @@ def end_session(body: SessionEnd, db: Session = Depends(get_db)):
 
 
 @app.get("/api/sessions")
-def list_sessions(_key: str = Depends(require_api_key), db: Session = Depends(get_db)):
+def list_sessions(_auth: dict = Depends(require_auth), db: Session = Depends(get_db)):
     rows = db.query(RecordSession).order_by(RecordSession.created_at.desc()).all()
     return [
         {

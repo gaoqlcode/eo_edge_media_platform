@@ -38,9 +38,11 @@ code=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8101/api/
 [[ "$code" == "401" ]] && echo "401 OK" || echo "WARN expected 401 got $code"
 
 echo "== API flow =="
-curl -sf -X POST http://127.0.0.1:8101/api/devices "${AUTH[@]}" \
+TRACE_HDR=(-H "X-Trace-Id: e2e-trace-$(date +%s)")
+curl -sf -D /tmp/emp_hdr.txt -X POST http://127.0.0.1:8101/api/devices "${AUTH[@]}" "${TRACE_HDR[@]}" \
   -H 'Content-Type: application/json' \
   -d '{"device_code":"edge-e2e-pg","name":"PG联调边端","platform":"wsl"}' || true
+grep -i 'X-Trace-Id' /tmp/emp_hdr.txt || true
 curl -sf -X POST http://127.0.0.1:8101/api/devices/heartbeat \
   -H 'Content-Type: application/json' \
   -d '{"device_code":"edge-e2e-pg","status":"online","platform":"wsl"}'; echo
@@ -48,12 +50,13 @@ curl -sf "http://127.0.0.1:8101/api/devices/edge-e2e-pg/online"; echo
 curl -sf "http://127.0.0.1:8101/metrics" | head -5; echo
 
 SESSION="sess-pg-$(date +%s)"
-curl -sf -X POST http://127.0.0.1:8102/api/sessions/start \
+curl -sf -X POST http://127.0.0.1:8102/api/sessions/start "${AUTH[@]}" \
   -H 'Content-Type: application/json' \
   -d "{\"device_code\":\"edge-e2e-pg\",\"session_code\":\"${SESSION}\",\"storage_root\":\"data/${SESSION}\"}"
-curl -sf -X POST http://127.0.0.1:8103/api/assets \
+curl -sf -X POST http://127.0.0.1:8103/api/assets "${AUTH[@]}" \
   -H 'Content-Type: application/json' \
   -d "{\"session_code\":\"${SESSION}\",\"asset_type\":\"jpeg_seq\",\"relative_path\":\"cam0/0001.jpg\",\"byte_size\":1024}"
+curl -sf "http://127.0.0.1:8103/api/playback/${SESSION}" | head -c 300; echo
 curl -sf -X POST http://127.0.0.1:8104/api/alarms "${AUTH[@]}" \
   -H 'Content-Type: application/json' \
   -d '{"device_code":"edge-e2e-pg","severity":"info","code":"E2E_PG_OK","message":"postgres e2e"}'
@@ -61,21 +64,43 @@ curl -sf http://127.0.0.1:8105/api/bff/dashboard | head -c 400; echo
 psql -h 127.0.0.1 -p 55432 -U emp -d emp_platform -c \
   "SELECT device_code,status FROM devices WHERE device_code='edge-e2e-pg';"
 
-echo "== edge_agent + preview =="
-EMP_FRAMES=5 EMP_DEVICE_CODE=edge-e2e-pg \
-  "${ROOT}/build/bin/edge_agent" "${ROOT}/build/lib/libemp_cam_Virtual.so"
-"${ROOT}/build/bin/media_gateway" >/tmp/emp_gw.log 2>&1 &
-GW_PID=$!; sleep 0.5
-echo PING | nc -w 1 127.0.0.1 9100 || true
-# HTTP 预览
-curl -sf -o /tmp/emp_preview.jpg "http://127.0.0.1:9101/preview?device=edge-e2e-pg"
-file /tmp/emp_preview.jpg || true
-ls -la /tmp/emp_preview.jpg
-# JWT
+echo "== JWT dual-auth on write =="
 TOK=$(curl -sf -X POST http://127.0.0.1:8105/api/bff/login \
   -H 'Content-Type: application/json' \
   -d '{"username":"admin","password":"admin123"}' | "${PYTHON}" -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+curl -sf -X POST http://127.0.0.1:8104/api/alarms \
+  -H "Authorization: Bearer ${TOK}" \
+  -H 'Content-Type: application/json' \
+  -d '{"device_code":"edge-e2e-pg","severity":"info","code":"E2E_JWT_OK","message":"jwt dual auth"}'
+echo
 curl -sf http://127.0.0.1:8105/api/bff/me -H "Authorization: Bearer ${TOK}"; echo
+
+echo "== worker idempotency =="
+"${PYTHON}" - <<'PY'
+from emp_py.idempotency import already_processed
+assert already_processed("e2e-idem-1", body="{}") is False
+assert already_processed("e2e-idem-1", body="{}") is True
+print("idempotency OK")
+PY
+"${PYTHON}" "${ROOT}/platform/services/media_worker/worker.py" outbox || true
+
+echo "== edge_agent + preview =="
+EMP_FRAMES=5 EMP_DEVICE_CODE=edge-e2e-pg EMP_API_KEY=emp-dev-key \
+  "${ROOT}/build/bin/edge_agent" "${ROOT}/build/lib/libemp_cam_Virtual.so"
+# 可选 H.264：取含 JPEG 的最新会话目录
+SESS_DIR=""
+while IFS= read -r d; do
+  if [[ -f "${d}/cam0/0.jpg" ]]; then SESS_DIR="$d"; break; fi
+done < <(ls -dt "${ROOT}"/data/sessions/sess-edge-* 2>/dev/null || true)
+if [[ -n "${SESS_DIR}" ]] && command -v ffmpeg >/dev/null 2>&1; then
+  bash "${ROOT}/scripts/encode_session_h264.sh" "${SESS_DIR}/cam0" /tmp/emp_e2e_preview.mp4 || true
+fi
+"${ROOT}/build/bin/media_gateway" >/tmp/emp_gw.log 2>&1 &
+GW_PID=$!; sleep 0.5
+echo PING | nc -w 1 127.0.0.1 9100 || true
+curl -sf -o /tmp/emp_preview.jpg "http://127.0.0.1:9101/preview?device=edge-e2e-pg"
+file /tmp/emp_preview.jpg || true
+ls -la /tmp/emp_preview.jpg
 kill "${GW_PID}" 2>/dev/null || true
 bash "${ROOT}/scripts/stop_python_services.sh"
 echo "E2E PASSED (enterprise checks)"

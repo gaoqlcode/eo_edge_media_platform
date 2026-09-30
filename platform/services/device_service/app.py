@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "libs" / "emp_py"))
 
-from emp_py.auth import require_api_key  # noqa: E402
+from emp_py.auth import require_auth  # noqa: E402
 from emp_py.db import get_db, init_db  # noqa: E402
 from emp_py.fastapi_app import create_service_app  # noqa: E402
 from emp_py.models import Device, Tenant  # noqa: E402
@@ -69,7 +69,7 @@ def list_devices(db: Session = Depends(get_db)):
 def create_device(
     body: DeviceCreate,
     db: Session = Depends(get_db),
-    _key: str = Depends(require_api_key),
+    _auth: dict = Depends(require_auth),
 ):
     tenant = db.query(Tenant).filter_by(code="default").first()
     if not tenant:

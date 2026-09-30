@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "libs" / "emp_py"))
 
-from emp_py.auth import require_api_key  # noqa: E402
+from emp_py.auth import require_auth  # noqa: E402
 from emp_py.db import get_db, init_db  # noqa: E402
 from emp_py.fastapi_app import create_service_app  # noqa: E402
 from emp_py.models import AlarmEvent, Device  # noqa: E402
@@ -31,7 +31,7 @@ def on_startup():
 
 
 @app.post("/api/alarms")
-def create_alarm(body: AlarmIn, db: Session = Depends(get_db), _k: str = Depends(require_api_key)):
+def create_alarm(body: AlarmIn, db: Session = Depends(get_db), _auth: dict = Depends(require_auth)):
     device_id = None
     if body.device_code:
         d = db.query(Device).filter_by(device_code=body.device_code).first()
@@ -65,7 +65,7 @@ def list_alarms(db: Session = Depends(get_db)):
 
 
 @app.post("/api/alarms/{alarm_id}/ack")
-def ack_alarm(alarm_id: str, db: Session = Depends(get_db), _k: str = Depends(require_api_key)):
+def ack_alarm(alarm_id: str, db: Session = Depends(get_db), _auth: dict = Depends(require_auth)):
     a = db.query(AlarmEvent).filter_by(id=alarm_id).first()
     if not a:
         raise HTTPException(404, "alarm not found")

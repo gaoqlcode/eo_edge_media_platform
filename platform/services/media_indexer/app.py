@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "libs" / "emp_py"))
 
+from emp_py.auth import require_auth  # noqa: E402
 from emp_py.db import get_db, init_db  # noqa: E402
 from emp_py.fastapi_app import create_service_app  # noqa: E402
 from emp_py.models import MediaAsset, RecordSession  # noqa: E402
@@ -30,7 +31,11 @@ def on_startup():
 
 
 @app.post("/api/assets")
-def add_asset(body: AssetIn, db: Session = Depends(get_db)):
+def add_asset(
+    body: AssetIn,
+    db: Session = Depends(get_db),
+    _auth: dict = Depends(require_auth),
+):
     s = db.query(RecordSession).filter_by(session_code=body.session_code).first()
     if not s:
         raise HTTPException(404, "session not found")
@@ -65,3 +70,25 @@ def list_assets(session_code: str = None, db: Session = Depends(get_db)):
         }
         for a in rows
     ]
+
+
+@app.get("/api/playback/{session_code}")
+def playback_index(session_code: str, db: Session = Depends(get_db)):
+    """回放索引：列出会话资产，供客户端按相对路径拉帧/成片。"""
+    s = db.query(RecordSession).filter_by(session_code=session_code).first()
+    if not s:
+        raise HTTPException(404, "session not found")
+    assets = db.query(MediaAsset).filter_by(session_id=s.id).all()
+    return {
+        "session_code": session_code,
+        "status": s.status,
+        "storage_root": s.storage_root,
+        "assets": [
+            {
+                "asset_type": a.asset_type,
+                "relative_path": a.relative_path,
+                "byte_size": a.byte_size,
+            }
+            for a in assets
+        ],
+    }

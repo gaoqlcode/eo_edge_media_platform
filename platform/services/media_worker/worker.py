@@ -1,6 +1,6 @@
 """
 文件：media_worker/worker.py
-内容：RabbitMQ 消费 + 死信队列（DLQ）配置；失败 nack 进 DLQ
+内容：RabbitMQ 消费 + DLQ + 幂等（event_id / 正文哈希）
 """
 import json
 import sys
@@ -10,16 +10,22 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "libs" / "emp_py"))
 
 from emp_py.config import settings  # noqa: E402
+from emp_py.idempotency import already_processed  # noqa: E402
 
 
-def handle_message(body: str) -> None:
+def handle_message(body: str) -> str:
+    """处理一条消息；返回 skip|ok。异常向上抛出以触发 DLQ。"""
     data = json.loads(body)
+    event_id = data.get("event_id") or data.get("message_id")
+    if already_processed(event_id, body=body):
+        print(f"[worker] skip duplicate event_id={event_id}", flush=True)
+        return "skip"
     topic = data.get("topic", "")
     payload = data.get("payload", {})
-    # 模拟业务：心跳事件打印；可扩展写库
     if topic == "emp.device.heartbeat" and payload.get("status") == "fault":
         raise RuntimeError("simulated fault handling failure")
-    print(f"[worker] ok topic={topic} payload={payload}", flush=True)
+    print(f"[worker] ok event_id={event_id} topic={topic} payload={payload}", flush=True)
+    return "ok"
 
 
 def setup_topology(ch):
@@ -53,12 +59,11 @@ def consume_rabbit():
             ch_.basic_ack(delivery_tag=method.delivery_tag)
         except Exception as e:
             print(f"[worker] fail -> DLQ: {e}", flush=True)
-            # requeue=False 配合 DLX 进入死信队列
             ch_.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
 
     ch.basic_qos(prefetch_count=10)
     ch.basic_consume(queue="emp.media_worker", on_message_callback=_cb)
-    print("[worker] consuming emp.events with DLQ ...", flush=True)
+    print("[worker] consuming emp.events with DLQ + idempotency ...", flush=True)
     ch.start_consuming()
 
 

@@ -16,9 +16,13 @@
 namespace {
 
 bool http_post_json(const std::string& url, const std::string& json) {
+    const char* api_key = std::getenv("EMP_API_KEY");
+    if (!api_key) api_key = "emp-dev-key";
     const std::string cmd =
         "curl -sS -m 2 -X POST '" + url +
-        "' -H 'Content-Type: application/json' -d '" + json + "' >/dev/null 2>&1";
+        "' -H 'Content-Type: application/json'"
+        " -H 'X-API-Key: " + api_key + "'"
+        " -d '" + json + "' >/dev/null 2>&1";
     return std::system(cmd.c_str()) == 0;
 }
 

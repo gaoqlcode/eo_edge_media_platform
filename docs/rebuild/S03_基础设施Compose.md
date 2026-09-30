@@ -3,11 +3,10 @@
 > 状态：`[x] 已完成`
 
 ## 目标
-PostgreSQL + Redis 可用；Compose 文件齐全（Docker 镜像可拉取时一键起全栈）。
 
-## 当前推荐路径（已验证）
+PostgreSQL + Redis + RabbitMQ 可用；Compose 与本机双路径。
 
-无需 Docker 镜像时，用 micromamba 本机实例：
+## 路径 A：micromamba 本机（E2E 默认）
 
 ```bash
 bash scripts/start_infra_local.sh
@@ -15,23 +14,33 @@ bash scripts/start_infra_local.sh
 # Redis: 127.0.0.1:56379
 ```
 
-## Docker 路径
+## 路径 B：Docker Compose（企业一键）
+
+镜像已可拉取时：
 
 ```bash
-# 需已安装 docker.io（sudo apt install docker.io docker-compose）
 sudo docker-compose -f platform/infra/docker-compose.yml up -d
+# emp_postgres :5432（用户/库 emp / emp_platform，密码 emp_dev_pass）
+# emp_redis :6379、emp_rabbitmq :5672/:15672
 ```
 
-若 Docker Hub 超时，已配置 `/etc/docker/daemon.json` 镜像加速；仍失败时可：
+仅起 PG：
+
+```bash
+sudo docker-compose -f platform/infra/docker-compose.yml up -d postgres
+```
+
+Hub 超时可用 DaoCloud：
 
 ```bash
 sudo docker pull docker.m.daocloud.io/library/postgres:16
 sudo docker tag docker.m.daocloud.io/library/postgres:16 postgres:16
 ```
 
+> 注意：Compose PG `:5432` 与本机 micromamba `:55432` 并存，切库改 `DATABASE_URL`。
+
 ## 验收
 
 - [x] `start_infra_local.sh` 可起 PG/Redis
-- [x] 迁移 SQL 已应用到 PG
-- [x] `e2e_test.sh` 在 PostgreSQL 下通过（`psql` 可见设备行）
-- [x] `docker-compose.yml` version 3.3 可用
+- [x] Compose `emp_postgres` healthy，迁移表已建
+- [x] `e2e_test.sh` 在 micromamba PG 下通过
