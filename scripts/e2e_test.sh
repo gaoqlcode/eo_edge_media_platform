@@ -85,7 +85,9 @@ PY
 "${PYTHON}" "${ROOT}/platform/services/media_worker/worker.py" outbox || true
 
 echo "== edge_agent + preview =="
+cd "${ROOT}"
 EMP_FRAMES=5 EMP_DEVICE_CODE=edge-e2e-pg EMP_API_KEY=emp-dev-key \
+  EMP_DATA_ROOT="${ROOT}/data/sessions" EMP_PREVIEW_ROOT="${ROOT}/data/preview" \
   "${ROOT}/build/bin/edge_agent" "${ROOT}/build/lib/libemp_cam_Virtual.so"
 # 可选 H.264：取含 JPEG 的最新会话目录
 SESS_DIR=""
@@ -94,6 +96,7 @@ while IFS= read -r d; do
 done < <(ls -dt "${ROOT}"/data/sessions/sess-edge-* 2>/dev/null || true)
 if [[ -n "${SESS_DIR}" ]] && command -v ffmpeg >/dev/null 2>&1; then
   bash "${ROOT}/scripts/encode_session_h264.sh" "${SESS_DIR}/cam0" /tmp/emp_e2e_preview.mp4 || true
+  file /tmp/emp_e2e_preview.mp4 || true
 fi
 "${ROOT}/build/bin/media_gateway" >/tmp/emp_gw.log 2>&1 &
 GW_PID=$!; sleep 0.5
